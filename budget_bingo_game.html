@@ -89,7 +89,10 @@ input[type=text]::placeholder{color:rgba(237,233,225,.25)}
 .mic-panel{border:1px solid rgba(237,233,225,.1);border-radius:10px;padding:14px;background:rgba(237,233,225,.03);margin-bottom:16px}
 .mic-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .mic-row span{font-size:12px;font-weight:500;color:rgba(237,233,225,.7)}
-.live-out{font-family:'DM Mono',monospace;font-size:10px;color:rgba(237,233,225,.35);min-height:42px;line-height:1.7;border-top:1px solid rgba(237,233,225,.08);padding-top:9px;word-break:break-word}
+.live-out{font-family:'DM Mono',monospace;font-size:10px;color:rgba(237,233,225,.45);height:180px;overflow-y:auto;line-height:1.8;border-top:1px solid rgba(237,233,225,.08);padding-top:9px;word-break:break-word;white-space:pre-wrap;scroll-behavior:smooth}
+.live-out::-webkit-scrollbar{width:3px}
+.live-out::-webkit-scrollbar-track{background:transparent}
+.live-out::-webkit-scrollbar-thumb{background:rgba(237,233,225,.15);border-radius:2px}
 .live-hit{color:var(--green);font-weight:500}
 
 /* ── CHIPS ── */
@@ -289,7 +292,10 @@ input[type=text]::placeholder{color:rgba(237,233,225,.25)}
     <div class="mic-panel">
       <div class="mic-row">
         <span>Live mic detection</span>
-        <button class="btn btn-green btn-sm" id="mic-btn" onclick="toggleMic()">▶ Start</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="clearTranscript()" style="font-size:10px;padding:5px 10px;opacity:.5">Clear</button>
+          <button class="btn btn-green btn-sm" id="mic-btn" onclick="toggleMic()">▶ Start</button>
+        </div>
       </div>
       <div class="info" style="margin-bottom:10px;font-size:11px">
         Point your laptop mic toward the TV or speaker. <strong>Chrome desktop only.</strong> Listens for Wagle's buzzwords and auto-calls them.
@@ -299,8 +305,18 @@ input[type=text]::placeholder{color:rgba(237,233,225,.25)}
     <div class="called-label">Called so far (<span id="called-n">0</span>)</div>
     <div class="chips" id="called-chips"><span style="font-size:10px;color:rgba(237,233,225,.2);font-family:'DM Mono',monospace">none yet</span></div>
   </div>
+  <!-- Live answering panel -->
+  <div id="answering-panel" style="display:none;border:1px solid rgba(25,166,104,.25);border-radius:10px;padding:10px 14px;background:rgba(25,166,104,.06);margin-bottom:16px">
+    <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--green);margin-bottom:8px;opacity:.7">Live — answering now</div>
+    <div id="answering-list"></div>
+  </div>
   <div id="ht-manual" style="display:none">
     <div class="info">Tap a word the moment Wagle says it. It lights up on all player cards instantly.</div>
+    <!-- Live answering panel duplicated for manual tab -->
+    <div id="answering-panel-manual" style="display:none;border:1px solid rgba(25,166,104,.25);border-radius:10px;padding:10px 14px;background:rgba(25,166,104,.06);margin-bottom:12px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--green);margin-bottom:8px;opacity:.7">Live — answering now</div>
+      <div id="answering-list-manual"></div>
+    </div>
     <div class="wgrid" id="h-wgrid"></div>
   </div>
   <div id="ht-players" style="display:none">
@@ -563,7 +579,186 @@ const S={
   roomCode:"",isHost:false,name:"",
   card:[],marked:Array(25).fill(false),score:0,
   micOn:false,rec:null,trivIdx:null,trivTimer:null,
-  roomRef:null,lockedWords:{},cooldowns:new Set(),seenWords:new Set(),milestones:new Set(),
+  roomRef:null,lockedWords:{},cooldowns:new Set(),attemptCount:{},milestones:new Set(),fullTranscript:"",
+};
+
+/* ══ QUESTION BANK — 5 questions per word, rotated by attempt count ══ */
+const Q_BANK={
+  "Digital transformation":[
+    {q:"Digital transformation in Nepal's budget primarily modernises?",opts:["Military and police","Government services and the economy","Agriculture only","Foreign policy"],ans:1},
+    {q:"Which ministry leads Nepal's digital transformation?",opts:["Ministry of Home Affairs","Ministry of Communication & IT","Ministry of Finance","Ministry of Education"],ans:1},
+    {q:"What does 'e-governance' primarily mean?",opts:["Electronic warfare","Online government services","Digital currency","Social media policy"],ans:1},
+    {q:"Nepal's broadband penetration is approximately?",opts:["5%","15%","35%","70%"],ans:2},
+    {q:"Which Wagle phrase pairs with digital transformation?",opts:["Bikas ra Rojgar","Weightless economy","Krishi Pragati","Sushashan matra"],ans:1},
+  ],
+  "Good governance":[
+    {q:"'Sushashan' translates to?",opts:["Economic growth","Good governance","Infrastructure","Digital economy"],ans:1},
+    {q:"Which RSP slogan pairs most with Sushashan?",opts:["Bikas ra Samridhi","Sushashan ra Bikas","Rojgar ra Shanti","Arthik Pragati"],ans:1},
+    {q:"Good governance is Wagle's 'first dividend' for whom?",opts:["Investors","Citizens","Diaspora","Bureaucrats"],ans:1},
+    {q:"Which body monitors governance quality in Nepal?",opts:["CIAA","NRB","MoF","NPC"],ans:0},
+    {q:"Sushashan is a word from which language root?",opts:["English","Sanskrit","Maithili","Tibetan"],ans:1},
+  ],
+  "Agriculture":[
+    {q:"Approx share of Nepal's workforce in agriculture?",opts:["10%","25%","60%","85%"],ans:2},
+    {q:"Nepal's largest agricultural export is?",opts:["Rice","Cardamom","Tea","Wheat"],ans:1},
+    {q:"Prime Minister Agriculture Modernisation Project focuses on?",opts:["Export zones for crops","Mechanisation and irrigation","Urban farming","Livestock only"],ans:1},
+    {q:"Which river basin has the most irrigated farmland in Nepal?",opts:["Koshi","Gandaki","Karnali","Rapti"],ans:0},
+    {q:"'Krishi' means what in Nepali?",opts:["Irrigation","Farming/Agriculture","Livestock","Forest"],ans:1},
+  ],
+  "Tourism":[
+    {q:"Nepal's most globally recognised tourism asset?",opts:["Tropical beaches","Mount Everest","Ancient pyramids","Tiger reserves"],ans:1},
+    {q:"Visit Nepal campaign targets how many tourists annually?",opts:["500,000","1 million","2 million","5 million"],ans:2},
+    {q:"Lumbini is significant because it is the birthplace of?",opts:["Ram","Sita","Gautam Buddha","Ashoka"],ans:2},
+    {q:"Which trekking route is Nepal's most popular?",opts:["Everest Base Camp","Annapurna Circuit","Langtang","Mustang"],ans:0},
+    {q:"Nepal's tourism sector employs approximately what share of workers?",opts:["3%","8%","15%","25%"],ans:1},
+  ],
+  "Employment":[
+    {q:"Where do most Nepali migrant workers go?",opts:["Europe and USA","Gulf countries and Malaysia","China","Australia"],ans:1},
+    {q:"'Rojgar-mukhi' budget means?",opts:["Tax-focused","Employment-oriented","Export-driven","Agriculture-first"],ans:1},
+    {q:"Nepal's youth unemployment rate is estimated at?",opts:["5%","15%","40%","60%"],ans:2},
+    {q:"Which department manages foreign employment in Nepal?",opts:["DoFE","MoLE","DoI","NPC"],ans:0},
+    {q:"Wagle's employment goal is to reduce migration to which region?",opts:["India","Europe","Gulf countries","China"],ans:2},
+  ],
+  "Private sector":[
+    {q:"RSP's economic philosophy aligns with?",opts:["State enterprises","Market-friendly private sector","Trade isolation","Agricultural collectivism"],ans:1},
+    {q:"CNI stands for?",opts:["Central Nepal Industries","Confederation of Nepalese Industries","Committee for National Investment","Chamber of Nepal Inc"],ans:1},
+    {q:"Which act governs private companies in Nepal?",opts:["Companies Act 2063","Industrial Act 2049","Commerce Act 2075","Private Sector Act 2080"],ans:0},
+    {q:"Nepal's ease of doing business rank (approx) globally?",opts:["Top 10","Around 50","Around 100","Around 150"],ans:3},
+    {q:"Wagle told industrialists the private sector gained what?",opts:["Tax breaks","Political stability","Land rights","Export quotas"],ans:1},
+  ],
+  "Republic Day":[
+    {q:"Nepal became a Federal Democratic Republic in?",opts:["1990","2001","2008","2015"],ans:2},
+    {q:"Republic Day falls on which Nepali date?",opts:["Baisakh 1","Jestha 15","Ashadh 1","Shrawan 1"],ans:1},
+    {q:"Who was Nepal's first President?",opts:["Girija Prasad Koirala","Ram Baran Yadav","Bidhya Devi Bhandari","Parmanand Jha"],ans:1},
+    {q:"Nepal's current constitution was adopted in?",opts:["2006","2008","2015","2017"],ans:2},
+    {q:"Wagle's birthday coincides with Republic Day — he was born in?",opts:["1970","1974","1978","1982"],ans:1},
+  ],
+  "Infrastructure":[
+    {q:"Which infrastructure gap most constrains Nepal's growth?",opts:["Too many airports","Energy and road gaps","Excess ports","Overbuilt railways"],ans:1},
+    {q:"Kathmandu-Tarai Fast Track connects Kathmandu to which district?",opts:["Bara","Parsa","Rautahat","Makwanpur"],ans:3},
+    {q:"Nepal's total road network length is approximately?",opts:["10,000 km","30,000 km","80,000 km","200,000 km"],ans:2},
+    {q:"Which airport is Nepal's only international hub?",opts:["Pokhara","Gautam Buddha","Tribhuvan","Bhairahawa"],ans:2},
+    {q:"Nepal's national grid is managed by?",opts:["Nepal Telecom","Nepal Electricity Authority","Nepal Oil Corporation","NPC"],ans:1},
+  ],
+  "Structural reform":[
+    {q:"Nepal's 10-year average GDP growth per Wagle's white paper?",opts:["1.5%","4.2%","7.0%","9.5%"],ans:1},
+    {q:"Which international body co-authored Nepal's reform recommendations?",opts:["World Bank","IMF","ADB","All of the above"],ans:3},
+    {q:"Structural reform primarily targets which bottleneck?",opts:["Population growth","Bureaucratic inefficiency and low investment","Cultural conservatism","Geographic isolation only"],ans:1},
+    {q:"Wagle's white paper was published in which month of 2026?",opts:["January","April","July","October"],ans:1},
+    {q:"RSP's GDP growth target under structural reform?",opts:["4%","5.5%","7%","10%"],ans:2},
+  ],
+  "Export-oriented":[
+    {q:"Nepal's current trade balance is?",opts:["Export surplus","Heavily import-dependent deficit","Balanced","No significant trade"],ans:1},
+    {q:"Nepal's largest export commodity by value?",opts:["Pashmina","Carpets","Palm oil","Cardamom"],ans:2},
+    {q:"Which country is Nepal's largest export destination?",opts:["China","USA","India","Germany"],ans:2},
+    {q:"Nepal's export-to-GDP ratio is approximately?",opts:["2%","8%","20%","35%"],ans:1},
+    {q:"'Niraat-mukhi' budget means?",opts:["Import-focused","Export-oriented","Debt-reduction","Agriculture-first"],ans:1},
+  ],
+  "Revenue target":[
+    {q:"Who sets Nepal's budget fiscal ceiling?",opts:["IMF","National Planning Commission","Parliament","Finance Minister alone"],ans:1},
+    {q:"Nepal's tax-to-GDP ratio is approximately?",opts:["8%","14%","22%","30%"],ans:1},
+    {q:"Nepal's largest source of government revenue is?",opts:["Income tax","VAT","Customs duty","Foreign aid"],ans:1},
+    {q:"Nepal's Inland Revenue Department collects which taxes?",opts:["Customs only","Income and VAT","Property tax","All taxes"],ans:1},
+    {q:"FY 2083/84 budget ceiling was raised from Rs 1.89T to approximately?",opts:["Rs 2.0T","Rs 2.15T","Rs 2.5T","Rs 3T"],ans:1},
+  ],
+  "Diaspora":[
+    {q:"Remittances as share of Nepal's GDP?",opts:["3%","10%","25%","40%"],ans:2},
+    {q:"Which country has the largest Nepali diaspora?",opts:["India","Qatar","UAE","Malaysia"],ans:0},
+    {q:"Wagle's diaspora framing is?",opts:["Once a taxpayer always a taxpayer","Once a Nepali always a Nepali","Brain drain is inevitable","Diaspora first policy"],ans:1},
+    {q:"NRN stands for?",opts:["National Revenue Network","Non-Resident Nepali","Nepal Remittance Node","New Reform Nepal"],ans:1},
+    {q:"Nepal receives approximately how much in remittances annually?",opts:["$1 billion","$4 billion","$9 billion","$20 billion"],ans:2},
+  ],
+  "Hydropower":[
+    {q:"Nepal's electricity comes almost entirely from?",opts:["Solar","Coal","Hydropower","Wind"],ans:2},
+    {q:"Tanahun Hydropower Project is on which river?",opts:["Koshi","Gandaki","Karnali","Marsyangdi"],ans:3},
+    {q:"Nepal's theoretical hydro potential is?",opts:["10,000 MW","40,000 MW","83,000 MW","200,000 MW"],ans:2},
+    {q:"Nepal currently generates under how much MW?",opts:["500 MW","3,000 MW","10,000 MW","20,000 MW"],ans:1},
+    {q:"NEA stands for?",opts:["Nepal Energy Agency","Nepal Electricity Authority","National Energy Administration","Nepal Export Association"],ans:1},
+  ],
+  "Carbon credits":[
+    {q:"Nepal earns carbon credits through?",opts:["Factories","Forests and conservation","Coal mines","Airports"],ans:1},
+    {q:"Nepal's forest cover is approximately?",opts:["15%","30%","45%","65%"],ans:2},
+    {q:"REDD+ programme focuses on?",opts:["Road construction","Reducing deforestation emissions","River development","Digital exports"],ans:1},
+    {q:"Carbon credits are measured in units of?",opts:["Tonnes of CO2 equivalent","Kilowatt hours","Hectares","Litres"],ans:0},
+    {q:"Which ministry manages Nepal's REDD+ programme?",opts:["Ministry of Finance","Ministry of Environment","Ministry of Forests","Ministry of Agriculture"],ans:2},
+  ],
+  "Single window":[
+    {q:"Single window means all services through?",opts:["One minister","One portal","One tax","One bank"],ans:1},
+    {q:"Nepal's Investment Board operates under?",opts:["Ministry of Industry","Ministry of Finance","Office of PM","Ministry of Commerce"],ans:2},
+    {q:"Which city hosts Nepal's main single-window investment desk?",opts:["Pokhara","Kathmandu","Biratnagar","Butwal"],ans:1},
+    {q:"Wagle's single-window pledge includes being?",opts:["Slow and thorough","Time-bound and digital","Manual and documented","Multilingual only"],ans:1},
+    {q:"Single-window systems primarily reduce?",opts:["Tax rates","Red tape and bureaucratic delays","Corruption fines","Employment"],ans:1},
+  ],
+  "Cooperatives":[
+    {q:"Cooperatives primarily serve?",opts:["Urban tech workers","Rural farmers and communities","Military","Foreign investors"],ans:1},
+    {q:"How many cooperatives are registered in Nepal approx?",opts:["5,000","15,000","34,000","100,000"],ans:2},
+    {q:"Cooperatives connect farmers to what in this budget?",opts:["Military contracts","Finance insurance and markets","Foreign embassies","Digital platforms only"],ans:1},
+    {q:"Nepal's cooperative sector is governed by?",opts:["Nepal Rastra Bank","Department of Cooperatives","NPC","Ministry of Finance"],ans:1},
+    {q:"'Sahakari' means what in Nepali?",opts:["Subsidy","Cooperative","Savings","Insurance"],ans:1},
+  ],
+  "Public debt":[
+    {q:"Public debt refers to?",opts:["Private corporate loans","Total government borrowings","Forex reserves","Tax revenue"],ans:1},
+    {q:"Nepal's public debt as % of GDP is approximately?",opts:["15%","30%","42%","60%"],ans:2},
+    {q:"Nepal's main bilateral creditor is?",opts:["USA","China","India","Japan"],ans:3},
+    {q:"Internal debt means borrowing from?",opts:["Foreign governments","Domestic sources like treasury bonds","IMF","World Bank"],ans:1},
+    {q:"Debt sustainability means ensuring debt levels are?",opts:["As high as possible","Manageable relative to GDP and revenue","Always zero","Equal to GDP"],ans:1},
+  ],
+  "Weightless economy":[
+    {q:"Which institution awarded Wagle his PhD?",opts:["Harvard","LSE","Australian National University","Oxford"],ans:2},
+    {q:"Weightless economy includes which sectors?",opts:["Steel and cement","Software exports and cloud services","Agriculture and fisheries","Mining and quarrying"],ans:1},
+    {q:"Digital nomads contribute to the economy through?",opts:["Physical manufacturing","Remote work bringing foreign income","Agriculture","Tourism only"],ans:1},
+    {q:"Wagle envisions which city as Nepal's digital nomad hub?",opts:["Pokhara","Kathmandu","Bhaktapur","Dharan"],ans:0},
+    {q:"Cybersecurity exports fall under which economy type?",opts:["Heavy industry","Weightless high-value economy","Agriculture","Tourism"],ans:1},
+  ],
+  "2.1 trillion":[
+    {q:"At 133 NPR/USD, Rs 2.1T equals approximately?",opts:["$1.5 billion","$5 billion","$15.8 billion","$80 billion"],ans:2},
+    {q:"FY 2083/84 budget covers which year?",opts:["2025/26","2026/27","2027/28","2024/25"],ans:1},
+    {q:"Before revision, Nepal's budget ceiling was?",opts:["Rs 1.2T","Rs 1.89T","Rs 2.5T","Rs 3T"],ans:1},
+    {q:"Nepal's GDP is approximately?",opts:["$10 billion","$40 billion","$100 billion","$200 billion"],ans:1},
+    {q:"The budget is presented in which parliament session?",opts:["Winter session","Monsoon session","Joint session","Emergency session"],ans:2},
+  ],
+  "RSP manifesto":[
+    {q:"RSP's annual GDP growth target?",opts:["4%","5.5%","7%","10%"],ans:2},
+    {q:"RSP's 5-year GDP target?",opts:["$50B","$75B","$100B","$150B"],ans:2},
+    {q:"RSP's per capita income target in 5 years?",opts:["$2,000","$3,000","$5,000","$10,000"],ans:1},
+    {q:"RSP stands for?",opts:["Rastriya Swatantra Party","Rastriya Samajwadi Party","Reform and Stability Party","Rashtriya Sewa Party"],ans:0},
+    {q:"RSP's election manifesto was published in?",opts:["2019","2020","2022","2024"],ans:2},
+  ],
+  "UNDP advisor":[
+    {q:"How many countries did Wagle's UNDP role cover?",opts:["12","20","36","50"],ans:2},
+    {q:"Wagle's UNDP role was based in?",opts:["Geneva","Bangkok","New York","Nairobi"],ans:2},
+    {q:"UNDP stands for?",opts:["United Nations Development Programme","Universal National Development Plan","UN Data and Policy","United Nations Diplomatic Protocol"],ans:0},
+    {q:"Wagle's UNDP title was?",opts:["Director General","Chief Economic Advisor","Secretary General","Regional Representative"],ans:1},
+    {q:"UNDP's main mandate is?",opts:["Military peacekeeping","Sustainable human development","Trade regulation","Climate monitoring"],ans:1},
+  ],
+  "2015 earthquake":[
+    {q:"How much did Wagle help secure after the 2015 earthquake?",opts:["$400M","$1B","$4B","$10B"],ans:2},
+    {q:"The 2015 earthquake measured?",opts:["6.4","7.0","7.8","8.2"],ans:2},
+    {q:"Approximately how many died in the 2015 earthquake?",opts:["1,000","4,500","9,000","20,000"],ans:2},
+    {q:"PDNA stands for?",opts:["Post Disaster Needs Assessment","Public Development and National Aid","Primary Damage Notification Act","Pre-Disaster National Analysis"],ans:0},
+    {q:"The 2015 earthquake epicenter was near?",opts:["Kathmandu","Gorkha","Pokhara","Sindhupalchok"],ans:1},
+  ],
+  "LDC graduation":[
+    {q:"LDC graduation means Nepal would?",opts:["Get more aid","Lose preferential trade concessions","Join G20","Become fully developed"],ans:1},
+    {q:"Nepal is scheduled to graduate LDC status in?",opts:["2024","2026","2029","2032"],ans:2},
+    {q:"LDC stands for?",opts:["Least Developed Country","Low Debt Country","Local Development Criterion","Largest Developing Community"],ans:0},
+    {q:"How many LDCs are there globally approximately?",opts:["20","46","80","120"],ans:1},
+    {q:"LDC graduation criteria include?",opts:["Military strength only","Income health and economic vulnerability indices","Population size","Geographic location"],ans:1},
+  ],
+  "Per capita $3000":[
+    {q:"Nepal's current per capita income is approximately?",opts:["$500","$1,660","$4,000","$8,000"],ans:1},
+    {q:"Which South Asian country has the highest per capita income?",opts:["India","Bangladesh","Sri Lanka","Maldives"],ans:3},
+    {q:"RSP's per capita target of $3,000 within how many years?",opts:["2 years","5 years","10 years","20 years"],ans:1},
+    {q:"Per capita income means total GDP divided by?",opts:["Number of workers","Total population","Number of households","Adult population"],ans:1},
+    {q:"At $3,000 per capita Nepal would be classified as?",opts:["Low income","Lower-middle income","Upper-middle income","High income"],ans:1},
+  ],
+  "Fiscal ceiling":[
+    {q:"NPC's original FY2083/84 ceiling was?",opts:["Rs 1.2T","Rs 1.89T","Rs 2.5T","Rs 3T"],ans:1},
+    {q:"Which body formally approves Nepal's budget?",opts:["Cabinet","Parliament","NPC","Finance Ministry"],ans:1},
+    {q:"Fiscal ceiling is set based on?",opts:["IMF instructions","Revenue estimates and borrowing capacity","PM's preference","Donor pledges"],ans:1},
+    {q:"Nepal's fiscal year runs from?",opts:["January to December","Shrawan to Ashadh","April to March","Baisakh to Chaitra"],ans:1},
+    {q:"Wagle raised the ceiling by approximately how much?",opts:["Rs 100B","Rs 260B","Rs 500B","Rs 1T"],ans:1},
+  ],
 };
 const TSECS={easy:20,medium:15,hard:10};
 const PTS={easy:1,medium:2,hard:3};
@@ -668,24 +863,48 @@ function enterHost(){
     b.classList.add("on");
     setTimeout(()=>b.classList.remove("on"),6000);
   });
+  // Show who is answering in real time
+  S.roomRef.child("lockedWords").on("value",snap=>{
+    const locks=snap.val()||{};
+    const entries=Object.entries(locks);
+    // Update both mic and manual panels
+    ["answering-panel","answering-panel-manual"].forEach((panelId,i)=>{
+      const panel=$(panelId);
+      const listEl=$(i===0?"answering-list":"answering-list-manual");
+      if(!panel||!listEl)return;
+      if(entries.length===0){
+        panel.style.display="none";
+        listEl.innerHTML="";
+      } else {
+        panel.style.display="block";
+        listEl.innerHTML=entries.map(([word,player])=>
+          `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(237,233,225,.07);font-size:12px">
+            <span style="color:rgba(237,233,225,.7)">${word}</span>
+            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--green)">${player}</span>
+          </div>`
+        ).join("");
+      }
+    });
+  });
 }
 
 function buildWordGrid(called){
   const el=$("h-wgrid");el.innerHTML="";
   WORDS.forEach(w=>{
     const d=document.createElement("div");
-    const isCalled=called.includes(w.w);
-    d.className="wb "+w.diff+(isCalled?" called":"");
-    d.innerHTML=w.w+'<span class="wd">'+w.diff+"</span>";
+    const callCount=called.filter(x=>x===w.w).length;
+    // Show call count if called more than once — helps host track repeats
+    const countBadge=callCount>1?` <span style="color:var(--green);font-size:8px">${callCount}x</span>`:"";
+    d.className="wb "+w.diff+(callCount>0?" wb-called":"");
+    d.innerHTML=w.w+countBadge+'<span class="wd">'+w.diff+"</span>";
     d.onclick=()=>callWord(w.w);
     el.appendChild(d);
   });
 }
 
 async function callWord(word){
-  const snap=await S.roomRef.child("calledWords").once("value");
-  const ex=new Set(Object.values(snap.val()||{}));
-  if(ex.has(word)){toast("Already called");return;}
+  // Always allow re-calling — Wagle may repeat a word
+  // Each call adds a new entry so all players get re-notified
   await S.roomRef.child("calledWords/w"+Date.now()).set(word);
   toast("Called: "+word);
 }
@@ -750,24 +969,49 @@ function startMic(){
   S.rec=new SR();
   S.rec.continuous=true;
   S.rec.interimResults=true;
-  S.rec.lang="en-IN";  // Indian English — closer to Nepali accent
+  S.rec.lang="en-IN";
   const lastCalled=new Set();
+  // Full running transcript — survives recognition restarts
+  if(!S.fullTranscript)S.fullTranscript="";
+  let resultOffset=0;
 
   S.rec.onresult=async e=>{
-    let full="";
-    for(let i=0;i<e.results.length;i++)full+=e.results[i][0].transcript+" ";
-    const lc=full.toLowerCase();
-    const lo=$("live-out");
-    lo.textContent=full.slice(-200)||"Listening...";
+    const lo=document.getElementById("live-out");
+    let newFinal="";
+    let interim="";
+    for(let i=resultOffset;i<e.results.length;i++){
+      if(e.results[i].isFinal){
+        newFinal+=e.results[i][0].transcript+" ";
+        resultOffset=i+1;
+      } else {
+        interim+=e.results[i][0].transcript;
+      }
+    }
+    if(newFinal)S.fullTranscript+=newFinal;
 
+    // Render full transcript + dim interim
+    lo.innerHTML=
+      S.fullTranscript.replace(/</g,"&lt;")
+      +(interim?'<span style="color:rgba(237,233,225,.2)">'+interim.replace(/</g,"&lt;")+'</span>':"");
+    lo.scrollTop=lo.scrollHeight;
+
+    // Buzzword detection against full text
+    const fullText=(S.fullTranscript+interim).toLowerCase();
     const snap=await S.roomRef.child("calledWords").once("value");
-    const ex=new Set(Object.values(snap.val()||{}));
     const hits=[];
-
     WORDS.forEach(w=>{
-      if(ex.has(w.w)||lastCalled.has(w.w))return;
-      if(w.aliases.some(a=>lc.includes(a.toLowerCase()))){
-        hits.push(w);lastCalled.add(w.w);
+      if(lastCalled.has(w.w))return;
+      if(w.aliases.some(a=>fullText.includes(a.toLowerCase()))){
+        hits.push(w);
+        lastCalled.add(w.w);
+        // Highlight in transcript
+        w.aliases.forEach(a=>{
+          const safe=a.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+          S.fullTranscript=S.fullTranscript.replace(
+            new RegExp("("+safe+")","gi"),
+            '<mark style="background:rgba(25,166,104,.25);color:#a8f0cc;border-radius:2px;padding:0 2px">$1</mark>'
+          );
+        });
       }
     });
 
@@ -775,17 +1019,27 @@ function startMic(){
       const updates={};
       hits.forEach((w,i)=>{updates["calledWords/w"+(Date.now()+i)]=w.w;});
       await S.roomRef.update(updates);
-      lo.innerHTML=full.slice(-140)+' <span class="live-hit">→ '+hits.map(h=>h.w).join(", ")+"</span>";
+      toast("Auto-called: "+hits.map(h=>h.w).join(", "),3000);
+      lo.innerHTML=S.fullTranscript+(interim?'<span style="color:rgba(237,233,225,.2)">'+interim+'</span>':"");
+      lo.scrollTop=lo.scrollHeight;
     }
   };
-  S.rec.onerror=e=>{toast("Mic error: "+e.error);stopMic();};
+
+  S.rec.onerror=e=>{
+    if(e.error==="no-speech")return;
+    toast("Mic error: "+e.error);
+    stopMic();
+  };
   S.rec.onend=()=>{if(S.micOn)S.rec.start();};
   S.rec.start();
   S.micOn=true;
-  $("mic-btn").textContent="⏹ Stop";
-  $("mic-btn").className="btn sm danger";
-  $("live-out").textContent="Listening… aim mic at the TV or speaker.";
+  document.getElementById("mic-btn").textContent="⏹ Stop";
+  document.getElementById("mic-btn").className="btn btn-danger btn-sm";
+  if(!S.fullTranscript){
+    document.getElementById("live-out").innerHTML='<span style="color:rgba(237,233,225,.2)">Listening… aim mic at the TV or speaker.</span>';
+  }
 }
+
 
 function stopMic(){
   if(S.rec)S.rec.stop();
@@ -916,12 +1170,14 @@ async function openTrivia(idx){
   S.trivIdx=idx;
   $("t-word").textContent=cell.w;
   $("t-ctx").textContent=cell.ctx||"";
-  // Use backup question if this player already saw primary question for this word
-  const useBackup=S.seenWords.has(cell.w)&&BACKUP_Q[cell.w];
-  const activeQ=useBackup?BACKUP_Q[cell.w].q:cell.q;
-  const activeOpts=useBackup?BACKUP_Q[cell.w].opts:cell.opts;
-  const activeAns=useBackup?BACKUP_Q[cell.w].ans:cell.ans;
-  S.seenWords.add(cell.w);
+  // Rotate through Q_BANK by attempt count (5 questions per word)
+  if(!S.attemptCount[cell.w])S.attemptCount[cell.w]=0;
+  const bank=Q_BANK[cell.w]||[];
+  const qIdx=S.attemptCount[cell.w]%Math.max(bank.length,1);
+  const activeQ=bank.length?bank[qIdx].q:cell.q;
+  const activeOpts=bank.length?bank[qIdx].opts:cell.opts;
+  const activeAns=bank.length?bank[qIdx].ans:cell.ans;
+  S.attemptCount[cell.w]++;
   $("t-q").textContent=activeQ;
   const pill=$("t-pill");
   pill.textContent=cell.diff.toUpperCase()+" · +"+PTS[cell.diff]+" pt";
@@ -1055,28 +1311,38 @@ function shakeCell(idx){
 $("t-overlay").addEventListener("click",function(e){if(e.target===this)closeTrivia();});
 
 /* ── SESSION RESTORE on refresh ── */
-(async function restoreSession(){
+// Wait for DOM + Firebase to be fully ready before restoring
+window.addEventListener("load", async function restoreSession(){
   const raw=localStorage.getItem("bb_session");
   if(!raw)return;
-  let sess;try{sess=JSON.parse(raw);}catch(e){return;}
+  let sess;
+  try{sess=JSON.parse(raw);}catch(e){localStorage.removeItem("bb_session");return;}
   if(!sess.code||!sess.name)return;
-  // Check room still exists
-  const snap=await db.ref("rooms/"+sess.code).once("value");
-  if(!snap.exists()){localStorage.removeItem("bb_session");return;}
-  S.roomCode=sess.code;S.name=sess.name;S.roomRef=db.ref("rooms/"+sess.code);
-  if(sess.isHost){
-    S.isHost=true;
-    enterHost();
-  } else {
-    S.isHost=false;
-    S.card=sess.card||makeCard();
-    S.marked=sess.marked||Array(25).fill(false);
-    S.score=sess.score||0;
-    if(sess.milestones)sess.milestones.forEach(m=>S.milestones.add(m));
-    $("p-score").textContent=S.score;
-    enterPlayer();
+  try{
+    // Small delay ensures Firebase SDK is fully connected
+    await new Promise(r=>setTimeout(r,300));
+    const snap=await db.ref("rooms/"+sess.code).once("value");
+    if(!snap.exists()){localStorage.removeItem("bb_session");return;}
+    S.roomCode=sess.code;
+    S.name=sess.name;
+    S.roomRef=db.ref("rooms/"+sess.code);
+    if(sess.isHost){
+      S.isHost=true;
+      enterHost();
+    } else {
+      S.isHost=false;
+      S.card=sess.card||makeCard();
+      S.marked=sess.marked||Array(25).fill(false);
+      S.score=sess.score||0;
+      if(sess.milestones)sess.milestones.forEach(m=>S.milestones.add(m));
+      $("p-score").textContent=S.score;
+      enterPlayer();
+    }
+  } catch(e){
+    // Firebase error — stay on lobby, clear bad session
+    localStorage.removeItem("bb_session");
   }
-})();
+});
 </script>
 
 </body>
