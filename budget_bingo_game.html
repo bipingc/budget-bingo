@@ -152,8 +152,11 @@ input[type=text]::placeholder{color:rgba(237,233,225,.25)}
 
 /* ── BINGO BANNER ── */
 @keyframes pop{0%{transform:scale(.85)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
-.bingo-banner{display:none;background:var(--forest);border:1px solid rgba(25,166,104,.4);color:var(--cream);border-radius:10px;padding:14px;text-align:center;font-family:'Fraunces',serif;font-size:22px;font-weight:300;letter-spacing:3px;margin-bottom:16px;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+.bingo-banner{display:none;background:var(--forest);border:1px solid rgba(25,166,104,.4);color:var(--cream);border-radius:10px;padding:14px 16px;text-align:center;font-family:'Fraunces',serif;font-size:20px;font-weight:300;letter-spacing:2px;margin-bottom:16px;box-shadow:0 4px 24px rgba(0,0,0,.4);line-height:1.4}
 .bingo-banner.on{display:block;animation:pop .5s ease}
+.bingo-banner.line1{border-color:rgba(25,166,104,.5)}
+.bingo-banner.line2{border-color:rgba(196,123,43,.6);background:rgba(11,45,32,.9)}
+.bingo-banner.fullhouse{border-color:var(--green);background:rgba(10,60,35,.95)}
 
 /* ── TRIVIA ── */
 .toverlay{position:fixed;inset:0;background:rgba(5,18,13,.92);display:flex;align-items:flex-end;justify-content:center;z-index:200}
@@ -560,7 +563,7 @@ const S={
   roomCode:"",isHost:false,name:"",
   card:[],marked:Array(25).fill(false),score:0,
   micOn:false,rec:null,trivIdx:null,trivTimer:null,
-  roomRef:null,lockedWords:{},
+  roomRef:null,lockedWords:{},cooldowns:new Set(),seenWords:new Set(),milestones:new Set(),
 };
 const TSECS={easy:20,medium:15,hard:10};
 const PTS={easy:1,medium:2,hard:3};
@@ -658,6 +661,13 @@ function enterHost(){
       b.classList.add("on");
     }
   });
+  S.roomRef.child("milestoneEvents").on("child_added",snap=>{
+    const ev=snap.val();if(!ev)return;
+    const b=$("h-bingo-banner");
+    b.innerHTML=ev.emoji+" "+ev.player.toUpperCase()+" — "+ev.label+" (+"+ev.bonus+"pts)<br><small style='font-size:12px;font-weight:400'>"+ev.drinks+"</small>";
+    b.classList.add("on");
+    setTimeout(()=>b.classList.remove("on"),6000);
+  });
 }
 
 function buildWordGrid(called){
@@ -718,7 +728,7 @@ function renderScores(){
 
 async function resetGame(){
   if(!confirm("Reset all scores and called words?"))return;
-  await S.roomRef.update({calledWords:{},bingoWinners:{}});
+  await S.roomRef.update({calledWords:{},bingoWinners:{},lockedWords:{},milestoneEvents:{}});
   const snap=await S.roomRef.child("players").once("value");
   const updates={};
   Object.keys(snap.val()||{}).forEach(k=>{updates["players/"+k+"/score"]=0;});
@@ -819,6 +829,17 @@ function enterPlayer(){
       renderCard(Object.values(cw.val()||{}));
     });
   });
+  // Listen for milestone events from any player — show on everyone's screen
+  S.roomRef.child("milestoneEvents").on("child_added",snap=>{
+    const ev=snap.val();
+    if(!ev)return;
+    const b=$("p-bingo-banner");
+    b.innerHTML=ev.emoji+" "+ev.player.toUpperCase()+" — "+ev.label+"<br><span style='font-size:14px;font-family:DM Sans,sans-serif;font-weight:400;letter-spacing:1px'>"+ev.drinks+"</span>";
+    b.classList.add("on");
+    if(ev.type==="fullhouse")launchConfetti();
+    // Auto-hide after 6 seconds
+    setTimeout(()=>b.classList.remove("on"),6000);
+  });
 }
 
 /* ══════════════════════════════════
@@ -826,7 +847,7 @@ function enterPlayer(){
 ══════════════════════════════════ */
 function renderCard(called){
   const el=$("p-bgrid");
-  const bingoSet=new Set(calcBingo());
+  const bingoSet=new Set(calcBingoFlat());
   el.innerHTML="";
   S.card.forEach((cell,i)=>{
     const div=document.createElement("div");
@@ -851,16 +872,26 @@ function renderCard(called){
 }
 
 function calcBingo(){
-  const m=S.marked;const r=[];
+  const m=S.marked;const lines=[];
   for(let i=0;i<5;i++){
     const row=[i*5,i*5+1,i*5+2,i*5+3,i*5+4];
-    if(row.every(x=>m[x]))r.push(...row);
+    if(row.every(x=>m[x]))lines.push(row);
     const col=[i,i+5,i+10,i+15,i+20];
-    if(col.every(x=>m[x]))r.push(...col);
+    if(col.every(x=>m[x]))lines.push(col);
   }
-  if([0,6,12,18,24].every(x=>m[x]))r.push(0,6,12,18,24);
-  if([4,8,12,16,20].every(x=>m[x]))r.push(4,8,12,16,20);
-  return [...new Set(r)];
+  if([0,6,12,18,24].every(x=>m[x]))lines.push([0,6,12,18,24]);
+  if([4,8,12,16,20].every(x=>m[x]))lines.push([4,8,12,16,20]);
+  return lines;
+}
+function calcBingoFlat(){
+  return [...new Set(calcBingo().flat())];
+}
+function calcFullHouse(){
+  // Full house = all non-blank, non-free cells are marked
+  return S.card.every((cell,i)=>{
+    if(cell===FREE||( cell&&cell.blank))return true;
+    return S.marked[i];
+  });
 }
 
 /* ══════════════════════════════════
@@ -871,23 +902,35 @@ let tInt=null;
 async function openTrivia(idx){
   const cell=S.card[idx];
   if(!cell||cell===FREE||cell.blank||!cell.q)return;
+  // Block if this player is in cooldown for this word
+  const coolKey=S.name+"__"+cell.w;
+  if(S.cooldowns.has(coolKey)){toast("Wait before trying again...");return;}
   // Try to lock — bail if another player already holds it
   const lockRef=S.roomRef.child("lockedWords/"+san(cell.w));
   const lockSnap=await lockRef.once("value");
-  if(lockSnap.exists()&&lockSnap.val()!==S.name){toast("Someone else is answering!");return;}
+  const holder=lockSnap.val();
+  if(lockSnap.exists()&&holder!==S.name){toast(holder+" is answering — wait!");return;}
+  // Block same player from re-entering immediately after wrong (lock still has their name)
+  if(lockSnap.exists()&&holder===S.name){toast("Wait for your cooldown...");return;}
   await lockRef.set(S.name);
   S.trivIdx=idx;
   $("t-word").textContent=cell.w;
   $("t-ctx").textContent=cell.ctx||"";
-  $("t-q").textContent=cell.q;
+  // Use backup question if this player already saw primary question for this word
+  const useBackup=S.seenWords.has(cell.w)&&BACKUP_Q[cell.w];
+  const activeQ=useBackup?BACKUP_Q[cell.w].q:cell.q;
+  const activeOpts=useBackup?BACKUP_Q[cell.w].opts:cell.opts;
+  const activeAns=useBackup?BACKUP_Q[cell.w].ans:cell.ans;
+  S.seenWords.add(cell.w);
+  $("t-q").textContent=activeQ;
   const pill=$("t-pill");
   pill.textContent=cell.diff.toUpperCase()+" · +"+PTS[cell.diff]+" pt";
   pill.className="diff-pill "+cell.diff;
   const opts=$("t-opts");opts.innerHTML="";
-  cell.opts.forEach((opt,i)=>{
+  activeOpts.forEach((opt,i)=>{
     const btn=document.createElement("button");
     btn.className="topt";btn.textContent=opt;
-    btn.onclick=()=>answer(i,cell.ans,idx,cell.diff);
+    btn.onclick=()=>answer(i,activeAns,idx,cell.diff);
     opts.appendChild(btn);
   });
   const lim=TSECS[cell.diff];
@@ -913,9 +956,15 @@ async function answer(chosen,correct,idx,diff){
   if(chosen!==correct){
     opts[chosen].classList.add("no");
     setTimeout(async()=>{
-      closeTrivia();shakeCell(idx);toast("Wrong! Square is open for others 😬");
+      closeTrivia();shakeCell(idx);toast("Wrong! Others can try now 😬");
       const wrongCell=S.card[idx];
-      if(wrongCell&&wrongCell.w)await S.roomRef.child("lockedWords/"+san(wrongCell.w)).remove();
+      if(wrongCell&&wrongCell.w){
+        // Set 20-second cooldown for this player on this word
+        const ck=S.name+"__"+wrongCell.w;
+        S.cooldowns.add(ck);
+        setTimeout(()=>S.cooldowns.delete(ck),20000);
+        await S.roomRef.child("lockedWords/"+san(wrongCell.w)).remove();
+      }
     },900);
     return;
   }
@@ -948,6 +997,56 @@ async function answer(chosen,correct,idx,diff){
   },700);
 }
 
+
+/* ══ MILESTONE SYSTEM ══ */
+const MILESTONES={
+  line1:{label:"FIRST LINE",bonus:10,drinks:"Everyone sips once 🍺",emoji:"✦"},
+  line2:{label:"DOUBLE LINE",bonus:25,drinks:"Everyone sips twice 🍺🍺",emoji:"✦✦"},
+  line3:{label:"TRIPLE LINE",bonus:40,drinks:"Everyone sips three times 🍺🍺🍺",emoji:"✦✦✦"},
+  fullhouse:{label:"FULL HOUSE",bonus:50,drinks:"Everyone finishes their drink! 🍻",emoji:"🏆"},
+};
+
+async function checkMilestones(playerKey){
+  const lines=calcBingo();
+  const lineCount=lines.length;
+  const isFull=calcFullHouse();
+
+  // Determine new milestone reached
+  let newMilestone=null;
+  if(isFull&&!S.milestones.has("fullhouse")){
+    newMilestone="fullhouse";
+  } else if(lineCount>=3&&!S.milestones.has("line3")&&!S.milestones.has("fullhouse")){
+    newMilestone="line3";
+  } else if(lineCount>=2&&!S.milestones.has("line2")&&!S.milestones.has("line3")&&!S.milestones.has("fullhouse")){
+    newMilestone="line2";
+  } else if(lineCount>=1&&!S.milestones.has("line1")&&!S.milestones.has("line2")&&!S.milestones.has("line3")&&!S.milestones.has("fullhouse")){
+    newMilestone="line1";
+  }
+
+  if(newMilestone){
+    S.milestones.add(newMilestone);
+    const m=MILESTONES[newMilestone];
+    // Add bonus points
+    S.score+=m.bonus;
+    $("p-score").textContent=S.score;
+    // Persist
+    const sess=JSON.parse(localStorage.getItem("bb_session")||"{}");
+    sess.score=S.score;sess.milestones=[...S.milestones];
+    localStorage.setItem("bb_session",JSON.stringify(sess));
+    // Write to Firebase — all players see this
+    await S.roomRef.child("milestoneEvents/"+Date.now()).set({
+      player:S.name,type:newMilestone,label:m.label,drinks:m.drinks,emoji:m.emoji,bonus:m.bonus
+    });
+    // Update score in Firebase
+    await S.roomRef.child("players/"+playerKey+"/score").set(S.score);
+    // Show full house confetti
+    if(newMilestone==="fullhouse")launchConfetti();
+    toast(m.emoji+" "+m.label+" +"+m.bonus+"pts! "+m.drinks,5000);
+  } else {
+    // Still update score even if no new milestone
+    await S.roomRef.child("players/"+playerKey+"/score").set(S.score);
+  }
+}
 function closeTrivia(){clearInterval(tInt);$("t-overlay").style.display="none";}
 function shakeCell(idx){
   const cells=document.querySelectorAll(".bc");
@@ -973,6 +1072,7 @@ $("t-overlay").addEventListener("click",function(e){if(e.target===this)closeTriv
     S.card=sess.card||makeCard();
     S.marked=sess.marked||Array(25).fill(false);
     S.score=sess.score||0;
+    if(sess.milestones)sess.milestones.forEach(m=>S.milestones.add(m));
     $("p-score").textContent=S.score;
     enterPlayer();
   }
