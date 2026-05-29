@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/budget_bingo_game.html" }
+  ]
+}
