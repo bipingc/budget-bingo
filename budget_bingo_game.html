@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Budget Bingo 2083/84 — मंथन</title>
+<title>Budget Bingo 2083/84 — मन्थन</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -142,6 +142,10 @@ input[type=text]::placeholder{color:rgba(237,233,225,.25)}
 .bc.bingo-lit .bw,.bc.bingo-lit .bcat,.bc.bingo-lit .bdiff{color:#a8f0cc}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .bc.shake{animation:shake .35s ease}
+.bc-blank{background:transparent!important;border-color:rgba(237,233,225,.04)!important;pointer-events:none}
+.bc-blank .bw,.bc-blank .bcat,.bc-blank .bdiff{display:none}
+.called-locked{border-color:rgba(237,233,225,.15)!important;background:rgba(237,233,225,.03)!important;cursor:not-allowed!important}
+.called-locked .bw{color:rgba(237,233,225,.3)!important}
 
 /* ── SCORE ── */
 .score-num{font-family:'Fraunces',serif;font-size:40px;font-weight:300;color:var(--green);line-height:1}
@@ -217,7 +221,7 @@ input[type=text]::placeholder{color:rgba(237,233,225,.25)}
     <div class="mast-kicker">Nepal Federal Parliament · Jestha 15, 2083</div>
     <div class="mast-title">Budget Bingo</div>
     <div class="mast-sub">FY 2083/84 · Dr. Swarnim Wagle presenting</div>
-    <div style="font-family:'Fraunces',serif;font-size:11px;font-weight:300;letter-spacing:2px;color:rgba(237,233,225,.22);margin-top:10px">a मंथन project</div>
+    <div style="font-family:'Fraunces',serif;font-size:11px;font-weight:300;letter-spacing:2px;color:rgba(237,233,225,.22);margin-top:10px">a मन्थन project</div>
   </div>
 
   <div id="lb-home">
@@ -334,7 +338,7 @@ input[type=text]::placeholder{color:rgba(237,233,225,.25)}
     <span style="color:#f0c070">● Med +2</span>
     <span style="color:#ff9090">● Hard +3</span>
   </div>
-  <div style="text-align:center;margin-top:24px;font-family:'Fraunces',serif;font-size:11px;font-weight:300;letter-spacing:2px;color:rgba(237,233,225,.18)">मंथन</div>
+  <div style="text-align:center;margin-top:24px;font-family:'Fraunces',serif;font-size:11px;font-weight:300;letter-spacing:2px;color:rgba(237,233,225,.18)">मन्थन</div>
 </div>
 
 <!-- ══ TRIVIA ══ -->
@@ -384,7 +388,6 @@ const FB_CFG={
   messagingSenderId:"1080769499669",
   appId:"1:1080769499669:web:ccd3cd11e0924a488c341c"
 };
-  
 firebase.initializeApp(FB_CFG);
 const db=firebase.database();
 
@@ -557,7 +560,7 @@ const S={
   roomCode:"",isHost:false,name:"",
   card:[],marked:Array(25).fill(false),score:0,
   micOn:false,rec:null,trivIdx:null,trivTimer:null,
-  roomRef:null,
+  roomRef:null,lockedWords:{},
 };
 const TSECS={easy:20,medium:15,hard:10};
 const PTS={easy:1,medium:2,hard:3};
@@ -810,6 +813,12 @@ function enterPlayer(){
       const b=$("p-bingo-banner");
       b.textContent="🎉 BINGO! "+S.name+" wins — everyone drinks! 🍺";b.classList.add("on");launchConfetti();}
   });
+  S.roomRef.child("lockedWords").on("value",snap=>{
+    S.lockedWords=snap.val()||{};
+    S.roomRef.child("calledWords").once("value",cw=>{
+      renderCard(Object.values(cw.val()||{}));
+    });
+  });
 }
 
 /* ══════════════════════════════════
@@ -859,9 +868,14 @@ function calcBingo(){
 ══════════════════════════════════ */
 let tInt=null;
 
-function openTrivia(idx){
+async function openTrivia(idx){
   const cell=S.card[idx];
-  if(!cell||cell===FREE||!cell.q)return;
+  if(!cell||cell===FREE||cell.blank||!cell.q)return;
+  // Try to lock — bail if another player already holds it
+  const lockRef=S.roomRef.child("lockedWords/"+san(cell.w));
+  const lockSnap=await lockRef.once("value");
+  if(lockSnap.exists()&&lockSnap.val()!==S.name){toast("Someone else is answering!");return;}
+  await lockRef.set(S.name);
   S.trivIdx=idx;
   $("t-word").textContent=cell.w;
   $("t-ctx").textContent=cell.ctx||"";
@@ -898,7 +912,11 @@ async function answer(chosen,correct,idx,diff){
   opts[correct].classList.add("ok");
   if(chosen!==correct){
     opts[chosen].classList.add("no");
-    setTimeout(()=>{closeTrivia();shakeCell(idx);toast("Wrong! No square for you 😬");},900);
+    setTimeout(async()=>{
+      closeTrivia();shakeCell(idx);toast("Wrong! Square is open for others 😬");
+      const wrongCell=S.card[idx];
+      if(wrongCell&&wrongCell.w)await S.roomRef.child("lockedWords/"+san(wrongCell.w)).remove();
+    },900);
     return;
   }
   setTimeout(async()=>{
@@ -908,6 +926,12 @@ async function answer(chosen,correct,idx,diff){
     S.score+=pts;
     $("p-score").textContent=S.score;
     toast("Correct! +"+pts+"pt 🎉");
+    const markedCell=S.card[idx];
+    if(markedCell&&markedCell.w)await S.roomRef.child("lockedWords/"+san(markedCell.w)).remove();
+    // Persist session
+    const sess2=JSON.parse(localStorage.getItem("bb_session")||"{}");
+    sess2.marked=S.marked;sess2.score=S.score;
+    localStorage.setItem("bb_session",JSON.stringify(sess2));
     const key=san(S.name);
     await S.roomRef.child("players/"+key+"/score").set(S.score);
     const blines=calcBingo();
@@ -930,6 +954,29 @@ function shakeCell(idx){
   if(cells[idx]){cells[idx].classList.add("shake");setTimeout(()=>cells[idx].classList.remove("shake"),400);}
 }
 $("t-overlay").addEventListener("click",function(e){if(e.target===this)closeTrivia();});
+
+/* ── SESSION RESTORE on refresh ── */
+(async function restoreSession(){
+  const raw=localStorage.getItem("bb_session");
+  if(!raw)return;
+  let sess;try{sess=JSON.parse(raw);}catch(e){return;}
+  if(!sess.code||!sess.name)return;
+  // Check room still exists
+  const snap=await db.ref("rooms/"+sess.code).once("value");
+  if(!snap.exists()){localStorage.removeItem("bb_session");return;}
+  S.roomCode=sess.code;S.name=sess.name;S.roomRef=db.ref("rooms/"+sess.code);
+  if(sess.isHost){
+    S.isHost=true;
+    enterHost();
+  } else {
+    S.isHost=false;
+    S.card=sess.card||makeCard();
+    S.marked=sess.marked||Array(25).fill(false);
+    S.score=sess.score||0;
+    $("p-score").textContent=S.score;
+    enterPlayer();
+  }
+})();
 </script>
 
 </body>
