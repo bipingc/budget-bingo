@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Budget Bingo 2083/84</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+/* ── RESET & BASE ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --ink:#1a1917;
+  --paper:#f7f2e9;
+  --card:#fffdf7;
+  --muted:#7a746d;
+  --border:#d4cbbf;
+  --red:#b5341a;
+  --gold:#9c7c0a;
+  --green:#1d6b3a;
+  --blue:#1a4f8a;
+  --tag-easy-bg:#e8f4ed;--tag-easy:#1d6b3a;
+  --tag-med-bg:#fdf3de;--tag-med:#9c7c0a;
+  --tag-hard-bg:#faeae7;--tag-hard:#b5341a;
+}
+html,body{min-height:100%;background:var(--paper);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.5}
+/* ── SCREENS ── */
+.screen{display:none;min-height:100vh;padding:20px 16px 40px;max-width:480px;margin:0 auto}
+.screen.on{display:block}
+/* ── MASTHEAD ── */
+.mast{text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:3px double var(--border)}
+.mast-kicker{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.mast-title{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;letter-spacing:-0.5px;line-height:1.1}
+.mast-sub{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:5px}
+/* ── BUTTONS ── */
+.btn{display:block;width:100%;padding:12px 16px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;border-radius:8px;border:1.5px solid var(--ink);background:var(--ink);color:var(--paper);transition:background .15s,border-color .15s;text-align:center;margin-bottom:8px;-webkit-appearance:none}
+.btn:hover{background:#333;border-color:#333}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn.ghost:hover{background:rgba(0,0,0,.05)}
+.btn.danger{background:var(--red);border-color:var(--red)}
+.btn.success{background:var(--green);border-color:var(--green)}
+.btn.sm{padding:7px 12px;font-size:12px;width:auto;display:inline-block;margin-bottom:0}
+.btn:disabled{opacity:.4;pointer-events:none}
+/* ── ROLE CARDS ── */
+.role-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.role{border:1.5px solid var(--border);border-radius:12px;padding:18px 14px 14px;cursor:pointer;background:var(--card);text-align:center;transition:border-color .15s,transform .15s}
+.role:hover{border-color:var(--red);transform:translateY(-2px)}
+.role-icon{font-size:32px;margin-bottom:8px;display:block}
+.role h3{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;margin-bottom:3px}
+.role p{font-size:11px;color:var(--muted);line-height:1.5}
+/* ── INPUTS ── */
+.field-label{display:block;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+input[type=text]{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:11px 13px;font-family:'DM Sans',sans-serif;font-size:15px;background:var(--card);color:var(--ink);outline:none;transition:border-color .15s;margin-bottom:10px;-webkit-appearance:none}
+input[type=text]:focus{border-color:var(--ink)}
+/* ── STATUS LINE ── */
+.status{display:inline-flex;align-items:center;gap:7px;background:var(--ink);color:var(--paper);border-radius:20px;padding:5px 12px;font-family:'DM Mono',monospace;font-size:11px;margin-bottom:14px}
+.dot{width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0}
+.dot.amber{background:#fbbf24}
+.dot.red{background:#f87171}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.dot{animation:blink 2s infinite}
+/* ── TABS ── */
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab{flex:1;padding:9px 4px;text-align:center;font-size:12px;cursor:pointer;color:var(--muted);border-bottom:2.5px solid transparent;transition:all .12s;font-family:'DM Mono',monospace;letter-spacing:.5px}
+.tab.on{color:var(--red);border-bottom-color:var(--red);font-weight:500}
+/* ── MIC BOX ── */
+.mic-panel{border:1.5px solid var(--border);border-radius:10px;padding:14px;background:var(--card);margin-bottom:14px}
+.mic-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mic-row span{font-size:13px;font-weight:500}
+.live-out{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);min-height:40px;line-height:1.7;border-top:1px solid var(--border);padding-top:9px;word-break:break-word}
+.live-hit{color:var(--red);font-weight:500}
+/* ── CALLED CHIPS ── */
+.chips{display:flex;flex-wrap:wrap;gap:4px;padding:9px;border:1px solid var(--border);border-radius:8px;background:var(--card);min-height:34px;margin-bottom:14px}
+.chip{border-radius:4px;padding:2px 7px;font-size:10px;font-family:'DM Mono',monospace;color:#fff;white-space:nowrap}
+.chip.easy{background:var(--green)}
+.chip.medium{background:var(--gold)}
+.chip.hard{background:var(--red)}
+/* ── WORD GRID ── */
+.wgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:14px}
+.wb{border:1px solid var(--border);border-radius:6px;padding:7px 5px;font-size:10px;cursor:pointer;background:var(--card);text-align:center;transition:border-color .12s,background .12s;line-height:1.3;font-weight:500}
+.wb .wd{display:block;font-size:8px;font-family:'DM Mono',monospace;margin-top:2px}
+.wb.easy .wd{color:var(--green)}
+.wb.medium .wd{color:var(--gold)}
+.wb.hard .wd{color:var(--red)}
+.wb.called{opacity:.25;pointer-events:none;background:#e8e0d5}
+.wb:not(.called):hover{border-color:var(--red)}
+/* ── PLAYER / SCORE LISTS ── */
+.plist{border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.prow{padding:9px 13px;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;align-items:center}
+.prow:last-child{border-bottom:none}
+.pbadge{font-family:'DM Mono',monospace;font-size:9px;padding:2px 7px;border-radius:10px;background:var(--border)}
+.pbadge.host{background:var(--ink);color:var(--paper)}
+.pbadge.pts{background:var(--green);color:#fff}
+.sbar-wrap{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin:0 10px}
+.sbar{height:100%;border-radius:2px;background:var(--ink);transition:width .5s ease;min-width:3px}
+/* ── BINGO CARD ── */
+.card-head{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-bottom:3px}
+.bl{text-align:center;font-family:'Playfair Display',serif;font-weight:900;font-size:20px;color:var(--red)}
+.bgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-bottom:10px}
+.bc{border:1.5px solid var(--border);border-radius:5px;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3px 2px;background:var(--card);transition:background .2s,border-color .2s;position:relative;cursor:default}
+.bc .bw{font-size:8.5px;font-weight:500;line-height:1.2;color:var(--ink)}
+.bc .bcat{font-size:7px;color:var(--muted);margin-top:1px}
+.bc .bdiff{position:absolute;top:2px;right:3px;font-family:'DM Mono',monospace;font-size:7px}
+.bc.easy .bdiff{color:var(--green)}
+.bc.medium .bdiff{color:var(--gold)}
+.bc.hard .bdiff{color:var(--red)}
+.bc.free-cell{background:var(--green);border-color:var(--green)}
+.bc.free-cell .bw{color:#fff;font-size:12px}
+.bc.called-now{border-color:var(--gold);background:#fffbe6;cursor:pointer}
+.bc.called-now .bw{color:var(--gold)}
+.bc.called-now:active{transform:scale(.95)}
+.bc.marked-ok{background:var(--ink);border-color:var(--ink);cursor:default}
+.bc.marked-ok .bw,.bc.marked-ok .bcat,.bc.marked-ok .bdiff{color:rgba(255,255,255,.6)}
+.bc.bingo-lit{background:var(--red);border-color:var(--red)}
+.bc.bingo-lit .bw,.bc.bingo-lit .bcat,.bc.bingo-lit .bdiff{color:#fff}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.bc.shake{animation:shake .35s ease}
+/* ── TRIVIA OVERLAY ── */
+.toverlay{position:fixed;inset:0;background:rgba(15,12,8,.7);display:flex;align-items:flex-end;justify-content:center;z-index:200}
+.tmodal{background:var(--paper);border-radius:18px 18px 0 0;padding:22px 18px 32px;width:100%;max-width:480px}
+.diff-pill{display:inline-block;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:3px 9px;border-radius:10px;color:#fff;margin-bottom:10px;font-weight:500}
+.diff-pill.easy{background:var(--green)}
+.diff-pill.medium{background:var(--gold)}
+.diff-pill.hard{background:var(--red)}
+.t-ctx{font-style:italic;font-size:12px;color:var(--muted);line-height:1.6;border-left:2px solid var(--border);padding-left:9px;margin-bottom:12px}
+.t-q{font-size:14px;line-height:1.55;font-weight:500;margin-bottom:14px}
+.topt{border:1.5px solid var(--border);border-radius:7px;padding:11px 13px;margin-bottom:7px;cursor:pointer;font-size:13px;background:var(--card);transition:border-color .12s;color:var(--ink);width:100%;text-align:left;font-family:'DM Sans',sans-serif}
+.topt:hover:not(:disabled){border-color:var(--ink)}
+.topt.ok{background:var(--green);border-color:var(--green);color:#fff;pointer-events:none}
+.topt.no{background:var(--red);border-color:var(--red);color:#fff;pointer-events:none;text-decoration:line-through}
+.tbar-bg{height:4px;background:var(--border);border-radius:2px;margin-bottom:12px;overflow:hidden}
+.tbar{height:100%;border-radius:2px;transition:width .12s linear}
+.tbar.easy{background:var(--green)}
+.tbar.medium{background:var(--gold)}
+.tbar.hard{background:var(--red)}
+.t-timer{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);text-align:right;margin-bottom:4px}
+/* ── BINGO BANNER ── */
+@keyframes pop{0%{transform:scale(.85)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+.bingo-banner{display:none;background:var(--red);color:#fff;border-radius:8px;padding:12px;text-align:center;font-family:'Playfair Display',serif;font-size:18px;font-weight:700;margin-bottom:14px;animation:pop .4s ease}
+.bingo-banner.on{display:block}
+/* ── ROOM CODE ── */
+.code-big{text-align:center;font-family:'DM Mono',monospace;font-size:34px;font-weight:500;letter-spacing:8px;padding:14px;border:2px dashed var(--border);border-radius:10px;color:var(--red);margin:10px 0;background:var(--card)}
+/* ── INFO BOX ── */
+.info{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:14px}
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 16px;border-radius:20px;font-family:'DM Mono',monospace;font-size:11px;z-index:400;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+/* ── LEGEND ── */
+.legend{display:flex;flex-wrap:wrap;gap:8px;font-size:10px;color:var(--muted);margin-bottom:8px}
+.legend span{display:flex;align-items:center;gap:3px}
+.lsq{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.hr{border:none;border-top:1px solid var(--border);margin:14px 0}
+/* ── SCORE HEADER ── */
+.score-num{font-family:'DM Mono',monospace;font-size:26px;font-weight:500;color:var(--red);line-height:1}
+/* ── CALLED COUNT ── */
+.called-label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<!-- ══ LOBBY ══ -->
+<div id="s-lobby" class="screen on">
+  <div class="mast">
+    <div class="mast-kicker">Nepal Federal Parliament · Jestha 15, 2083</div>
+    <div class="mast-title">Budget Bingo</div>
+    <div class="mast-sub">FY 2083/84 · Dr. Swarnim Wagle presenting</div>
+  </div>
+  <div id="lb-home">
+    <div class="info">
+      Play live as Wagle presents the national budget. When he says a buzzword on your card — tap it, answer a quick trivia question, mark the square.
+      Complete a row, column or diagonal = <strong>BINGO</strong> = everyone drinks 🍺<br><br>
+      <strong>Easy +1pt · Medium +2pt · Hard +3pt</strong>
+    </div>
+    <div class="role-row">
+      <div class="role" onclick="show('lb-host')">
+        <span class="role-icon">📢</span>
+        <h3>Host</h3>
+        <p>Create room · call words via mic or tap</p>
+      </div>
+      <div class="role" onclick="show('lb-player')">
+        <span class="role-icon">🎴</span>
+        <h3>Player</h3>
+        <p>Join with code · get your bingo card</p>
+      </div>
+    </div>
+    <div style="text-align:center;font-size:11px;color:var(--muted)">Free · Works on any phone · Up to 10 players</div>
+  </div>
+  <div id="lb-host" style="display:none">
+    <label class="field-label">Your name</label>
+    <input type="text" id="h-name" placeholder="e.g. Aarav" maxlength="14" autocomplete="off">
+    <button class="btn" onclick="createRoom()">Create room →</button>
+    <button class="btn ghost" onclick="show('lb-home')">← Back</button>
+  </div>
+  <div id="lb-player" style="display:none">
+    <label class="field-label">Your name</label>
+    <input type="text" id="p-name" placeholder="e.g. Bina" maxlength="14" autocomplete="off">
+    <label class="field-label" style="margin-top:4px">Room code (from host)</label>
+    <input type="text" id="p-code" placeholder="WAGLE7" maxlength="6"
+      style="text-transform:uppercase;letter-spacing:5px;font-family:'DM Mono',monospace;font-size:22px"
+      oninput="this.value=this.value.toUpperCase()" autocomplete="off">
+    <button class="btn" onclick="joinRoom()">Join room →</button>
+    <button class="btn ghost" onclick="show('lb-home')">← Back</button>
+  </div>
+</div>
+
+<!-- ══ HOST ══ -->
+<div id="s-host" class="screen">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div class="status"><span class="dot"></span>LIVE · <span id="h-code-hdr"></span></div>
+    <div style="font-size:12px;color:var(--muted)"><span id="h-pcount">1</span> players</div>
+  </div>
+  <div class="info" style="text-align:center">
+    Share code with players:<br>
+    <span class="code-big" id="h-code-big"></span>
+    <span style="font-size:11px">They open this URL and click Player</span>
+  </div>
+  <div id="h-bingo-banner" class="bingo-banner"></div>
+  <div class="tabs">
+    <div class="tab on" onclick="htab('mic')">🎙 Mic</div>
+    <div class="tab" onclick="htab('manual')">Manual</div>
+    <div class="tab" onclick="htab('players')">Players</div>
+    <div class="tab" onclick="htab('scores')">Scores</div>
+  </div>
+  <!-- MIC -->
+  <div id="ht-mic">
+    <div class="mic-panel">
+      <div class="mic-row">
+        <span>Live mic detection</span>
+        <button class="btn sm success" id="mic-btn" onclick="toggleMic()">▶ Start</button>
+      </div>
+      <div class="info" style="margin-bottom:8px;font-size:11px">
+        Point your laptop mic toward the TV or speaker. Chrome desktop only.
+        The game listens for buzzwords in Wagle's speech and auto-calls them.
+      </div>
+      <div class="live-out" id="live-out">Press Start to begin listening...</div>
+    </div>
+    <div class="called-label">Called so far (<span id="called-n">0</span>)</div>
+    <div class="chips" id="called-chips"><span style="font-size:11px;color:var(--muted)">none yet</span></div>
+  </div>
+  <!-- MANUAL -->
+  <div id="ht-manual" style="display:none">
+    <div class="info">Tap a word the moment Wagle says it. It lights up on all player cards instantly.</div>
+    <div class="wgrid" id="h-wgrid"></div>
+  </div>
+  <!-- PLAYERS -->
+  <div id="ht-players" style="display:none">
+    <div class="plist" id="h-plist"></div>
+    <button class="btn ghost" style="margin-top:8px" onclick="resetGame()">Reset game</button>
+  </div>
+  <!-- SCORES -->
+  <div id="ht-scores" style="display:none">
+    <div class="plist" id="h-scores"></div>
+  </div>
+</div>
+
+<!-- ══ PLAYER ══ -->
+<div id="s-player" class="screen">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div>
+      <div style="font-family:'Playfair Display',serif;font-size:19px;font-weight:700" id="p-name-hdr"></div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)" id="p-room-hdr"></div>
+    </div>
+    <div style="text-align:right">
+      <div class="score-num" id="p-score">0</div>
+      <div style="font-size:9px;color:var(--muted)">points</div>
+    </div>
+  </div>
+  <div id="p-status" class="status" style="background:var(--muted)"><span class="dot amber"></span>Waiting for words...</div>
+  <div id="p-bingo-banner" class="bingo-banner"></div>
+  <div class="card-head">
+    <div class="bl">B</div><div class="bl">I</div><div class="bl">N</div><div class="bl">G</div><div class="bl">O</div>
+  </div>
+  <div class="bgrid" id="p-bgrid"></div>
+  <div class="legend">
+    <span><span class="lsq" style="background:var(--card);border:1px solid var(--border)"></span>Waiting</span>
+    <span><span class="lsq" style="background:#fffbe6;border:1px solid var(--gold)"></span>Called — tap!</span>
+    <span><span class="lsq" style="background:var(--ink)"></span>Marked</span>
+    <span><span class="lsq" style="background:var(--red)"></span>Bingo</span>
+  </div>
+  <div style="display:flex;gap:12px;font-size:10px;margin-bottom:8px">
+    <span style="color:var(--green)">● Easy +1</span>
+    <span style="color:var(--gold)">● Medium +2</span>
+    <span style="color:var(--red)">● Hard +3</span>
+  </div>
+</div>
+
+<!-- ══ TRIVIA ══ -->
+<div class="toverlay" id="t-overlay" style="display:none">
+  <div class="tmodal">
+    <div class="field-label" style="margin-bottom:8px">Answer to claim this square</div>
+    <h3 id="t-word" style="font-family:'Playfair Display',serif;font-size:21px;margin-bottom:6px"></h3>
+    <span class="diff-pill" id="t-pill"></span>
+    <div class="t-timer" id="t-secs"></div>
+    <div class="tbar-bg"><div class="tbar" id="t-bar" style="width:100%"></div></div>
+    <div class="t-ctx" id="t-ctx"></div>
+    <div class="t-q" id="t-q"></div>
+    <div id="t-opts"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════════════════════════
+   FIREBASE — replace with your own
+══════════════════════════════════ */
+const FB_CFG = {
+  apiKey: "AIzaSyBEZP57mSpKaaYDtT00jOAznst1Z7RQUnQ",
+  authDomain: "buget-bingo-2083.firebaseapp.com",
+  databaseURL: "https://buget-bingo-2083-default-rtdb.firebaseio.com",
+  projectId: "buget-bingo-2083",
+  storageBucket: "buget-bingo-2083.firebasestorage.app",
+  messagingSenderId: "1080769499669",
+  appId: "1:1080769499669:web:ccd3cd11e0924a488c341c"
+};
+
+firebase.initializeApp(FB_CFG);
+const db=firebase.database();
+
+/* ══════════════════════════════════
+   WORD DATABASE
+   25 words, tiered easy/medium/hard
+   Each has phonetic aliases for STT
+══════════════════════════════════ */
+const WORDS=[
+  // ── EASY (8) ──────────────────────────────────────────────────
+  {w:"Digital transformation",diff:"easy",cat:"tech",
+   aliases:["digital transformation","digital transform","digital"],
+   ctx:"Wagle told Parliament this budget places digital transformation 'at the center of the national framework' — his signature phrase since 2025.",
+   q:"Digital transformation in Nepal's budget primarily means modernising which two sectors?",
+   opts:["Military and police","Government services and the economy","Agriculture and tourism only","Foreign policy and diplomacy"],ans:1},
+
+  {w:"Good governance",diff:"easy",cat:"policy",
+   aliases:["good governance","sushashan","susan","governance","sushasan"],
+   ctx:"'Sushashan' (सुशासन) is Wagle's most-repeated term. He called it the 'first dividend' citizens will feel under RSP's government.",
+   q:"The Nepali word 'Sushashan' translates to?",
+   opts:["Economic growth","Good governance","Infrastructure development","Digital economy"],ans:1},
+
+  {w:"Agriculture",diff:"easy",cat:"sector",
+   aliases:["agriculture","agricultural","krishi","farming","farmers","agri"],
+   ctx:"Agriculture is Nepal's largest employer. This budget prioritises commercial farming, irrigation, and market linkages for rural producers.",
+   q:"Approximately what share of Nepal's workforce depends on agriculture?",
+   opts:["10%","25%","60%","85%"],ans:2},
+
+  {w:"Tourism",diff:"easy",cat:"sector",
+   aliases:["tourism","tourist","paryatan","travel","trekking"],
+   ctx:"Tourism is Nepal's top foreign exchange earner alongside remittances. Everest, Lumbini, and cultural heritage sites are central to this budget's strategy.",
+   q:"Nepal's single most globally recognized tourism asset is?",
+   opts:["Tropical beaches","Mount Everest","Ancient pyramids","Tiger reserves"],ans:1},
+
+  {w:"Employment",diff:"easy",cat:"social",
+   aliases:["employment","rojgar","roger","jobs","rojgaar","employment generation","youth employment"],
+   ctx:"Wagle's budget is explicitly 'rojgar-mukhi' (employment-oriented). Reducing youth migration to Gulf countries is a stated measurable goal.",
+   q:"Where do most Nepali migrant workers currently go for employment?",
+   opts:["Europe and the USA","Gulf countries and Malaysia","China","Australia and New Zealand"],ans:1},
+
+  {w:"Private sector",diff:"easy",cat:"economy",
+   aliases:["private sector","private","business sector","nijee","private investment"],
+   ctx:"RSP is market-friendly. Wagle told the Confederation of Nepalese Industries: 'The private sector has gained the political stability it was seeking.'",
+   q:"RSP's economic philosophy most closely aligns with?",
+   opts:["State-owned enterprise dominance","Market-friendly private sector growth","Trade isolationism","Agricultural collectivism"],ans:1},
+
+  {w:"Republic Day",diff:"easy",cat:"special",
+   aliases:["republic day","ganatantra","republic","republic diwas","ganatantra diwas"],
+   ctx:"Budget was deliberately presented on Jestha 15 — Nepal's Republic Day. It is also Swarnim Wagle's birthday (born 29 May 1974).",
+   q:"Nepal became a Federal Democratic Republic in which year?",
+   opts:["1990","2001","2008","2015"],ans:2},
+
+  {w:"Infrastructure",diff:"easy",cat:"sector",
+   aliases:["infrastructure","purwaadhaar","roads","connectivity","bridges"],
+   ctx:"Roads, energy grids, and aviation safety all feature in Wagle's integrated infrastructure push. He treats these as mutually dependent, not separate silos.",
+   q:"Which infrastructure gap most constrains Nepal's economic growth?",
+   opts:["Too many airports","Energy and road connectivity gaps","Excess port capacity","Overbuilt railways"],ans:1},
+
+  // ── MEDIUM (9) ────────────────────────────────────────────────
+  {w:"Structural reform",diff:"medium",cat:"policy",
+   aliases:["structural reform","structural","reform","sanrachnatmak","structural changes","economic reform"],
+   ctx:"Wagle's April 2026 white paper diagnosed Nepal's 10-year average GDP growth at just 4.2% — far below RSP's 7% target. Structural reform is his proposed fix.",
+   q:"Nepal's 10-year average GDP growth per Wagle's white paper was approximately?",
+   opts:["1.5%","4.2%","7.0%","9.5%"],ans:1},
+
+  {w:"Export-oriented",diff:"medium",cat:"economy",
+   aliases:["export oriented","export","exports","niraat","export economy","export promotion"],
+   ctx:"Wagle: 'Nepal's import-driven economy will be transformed into a production-based, export-oriented competitive economy.' Nepal currently runs a significant trade deficit.",
+   q:"Nepal's current trade balance is best described as?",
+   opts:["Export surplus","Heavily import-dependent deficit","Perfectly balanced","No significant trade"],ans:1},
+
+  {w:"Revenue target",diff:"medium",cat:"fiscal",
+   aliases:["revenue target","revenue","rajaswa","rajashwa","tax revenue","revenue collection"],
+   ctx:"Total budget ceiling raised to approximately Rs 2.15 trillion — Rs 450 billion above the current year's revised estimate. Revenue mobilisation is the central challenge.",
+   q:"Who officially sets Nepal's annual budget fiscal ceiling before the Finance Minister?",
+   opts:["The IMF","National Planning Commission","A parliamentary vote","The Finance Minister alone"],ans:1},
+
+  {w:"Diaspora",diff:"medium",cat:"social",
+   aliases:["diaspora","pravasi","prabashi","remittance","remittances","nrn","non resident nepali"],
+   ctx:"Wagle plans legal reforms to channel diaspora investment and knowledge-transfer back to Nepal. 'Once a Nepali, always a Nepali' is his framing.",
+   q:"Remittances account for roughly what share of Nepal's GDP?",
+   opts:["3%","10%","25%","40%"],ans:2},
+
+  {w:"Hydropower",diff:"medium",cat:"energy",
+   aliases:["hydropower","hydro","jal vidhyut","jal bidhyut","electricity","power","energy","urja"],
+   ctx:"Nepal has 83,000 MW theoretical hydro potential but generates under 3,000 MW. NEA (Nepal Electricity Authority) receives a major allocation in this budget.",
+   q:"Nepal's electricity generation comes almost entirely from which source?",
+   opts:["Solar panels","Coal","Hydropower","Wind turbines"],ans:2},
+
+  {w:"Carbon credits",diff:"medium",cat:"environment",
+   aliases:["carbon credits","carbon","carbon trading","carbon credit","carbon market","emission","emissions"],
+   ctx:"Forest-based carbon credits are a stated Wagle priority. Nepal's forests cover 45% of its land area — one of the highest proportions in South Asia.",
+   q:"Nepal earns carbon credits primarily through which asset?",
+   opts:["Industrial factories","Forests and conservation areas","Coal mines","International airports"],ans:1},
+
+  {w:"Single window",diff:"medium",cat:"administration",
+   aliases:["single window","ek dwaar","one window","one stop","ek dwar","single window system"],
+   ctx:"Wagle's pledge: a 'single-window, time-bound and digital' administrative system to cut red tape for businesses and investors.",
+   q:"A 'single window' administrative system means?",
+   opts:["One minister makes all decisions","All government services via one portal","One unified tax only","One national bank"],ans:1},
+
+  {w:"Cooperatives",diff:"medium",cat:"social",
+   aliases:["cooperatives","cooperative","sahakari","sahakaari","producer companies"],
+   ctx:"Budget explicitly connects farmers to finance, insurance, and markets 'through cooperatives and producer companies' — a departure from purely individual bank lending.",
+   q:"Cooperatives in Nepal primarily serve which group?",
+   opts:["Urban technology workers","Rural farmers and communities","Military personnel","Foreign investors"],ans:1},
+
+  {w:"Public debt",diff:"medium",cat:"fiscal",
+   aliases:["public debt","debt","loan","rin","government debt","internal debt","external debt"],
+   ctx:"Nepal's public debt has grown significantly. Wagle's white paper flagged debt sustainability as a concern alongside the need for increased capital spending.",
+   q:"A government's 'public debt' refers to?",
+   opts:["Private corporate loans","Total money the government has borrowed","Foreign exchange reserves","Tax revenue collected"],ans:1},
+
+  // ── HARD (8) ─────────────────────────────────────────────────
+  {w:"Weightless economy",diff:"hard",cat:"tech",
+   aliases:["weightless economy","weightless","software export","digital export","cloud","ai computation","cybersecurity export"],
+   ctx:"Wagle coined 'weightless high-value economy' — software exports, cloud services, AI computation, cybersecurity, and digital nomad infrastructure. This is his vision beyond remittances.",
+   q:"Which prestigious institution awarded Swarnim Wagle his PhD?",
+   opts:["Harvard University","London School of Economics","Australian National University","Oxford University"],ans:2},
+
+  {w:"2.1 trillion",diff:"hard",cat:"fiscal",
+   aliases:["two point one trillion","2.1 trillion","two trillion","trillion","2 trillion","budget size","budget volume"],
+   ctx:"Final budget approximately Rs 2.1–2.2 trillion. Ironic: Wagle consistently criticised oversized budgets in academic writings before becoming Finance Minister.",
+   q:"At roughly 133 NPR per USD, Rs 2.1 trillion equals approximately how much in USD?",
+   opts:["$1.5 billion","$5 billion","$15.8 billion","$80 billion"],ans:2},
+
+  {w:"RSP manifesto",diff:"hard",cat:"policy",
+   aliases:["rsp manifesto","rsp","rastriya swatantra","manifesto","party manifesto","commitment"],
+   ctx:"RSP's 2022 election manifesto: 7% annual growth, per-capita income to $3,000 (from ~$1,660), and GDP to $100 billion within 5 years.",
+   q:"What annual GDP growth rate did RSP promise in their election manifesto?",
+   opts:["4%","5.5%","7%","10%"],ans:2},
+
+  {w:"UNDP advisor",diff:"hard",cat:"biography",
+   aliases:["undp","undp advisor","united nations","un advisor","chief economic advisor","development program"],
+   ctx:"Before entering politics, Wagle was Chief Economic Advisor at UNDP Regional Bureau for Asia-Pacific in New York — a role covering 36 countries.",
+   q:"How many countries did Wagle's UNDP advisory role cover?",
+   opts:["12 countries","20 countries","36 countries","50 countries"],ans:2},
+
+  {w:"2015 earthquake",diff:"hard",cat:"history",
+   aliases:["earthquake","bhukampa","bhukamp","disaster","pdna","post disaster","reconstruction fund"],
+   ctx:"Wagle co-led Nepal's Post Disaster Needs Assessment after the April 2015 earthquake (7.8 magnitude, ~9,000 deaths), which secured US$4 billion in international pledges.",
+   q:"How much reconstruction funding did Wagle help Nepal secure after the 2015 earthquake?",
+   opts:["$400 million","$1 billion","$4 billion","$10 billion"],ans:2},
+
+  {w:"LDC graduation",diff:"hard",cat:"global",
+   aliases:["ldc","ldc graduation","least developed","graduation","least developed country","ldc status"],
+   ctx:"Nepal faces Least Developed Country graduation — meaning it would lose preferential trade concessions. This is a significant trade policy challenge Wagle must address.",
+   q:"For Nepal, 'LDC graduation' in trade terms primarily means?",
+   opts:["Receiving more foreign aid","Losing preferential trade concessions","Joining the G20","Becoming a fully developed country"],ans:1},
+
+  {w:"Per capita $3000",diff:"hard",cat:"fiscal",
+   aliases:["per capita","per capita income","three thousand","3000","income target","per head income","gdp per capita"],
+   ctx:"RSP's 5-year target: raise Nepal's per capita income from ~$1,660 to $3,000. Currently Nepal ranks among South Asia's lowest per-capita economies.",
+   q:"Nepal's current approximate per capita income (GDP per person) is?",
+   opts:["Around $500","Around $1,660","Around $4,000","Around $8,000"],ans:1},
+
+  {w:"Fiscal ceiling",diff:"hard",cat:"fiscal",
+   aliases:["fiscal ceiling","ceiling","budget ceiling","fiscal limit","resource ceiling","resource estimation","NPC ceiling"],
+   ctx:"National Planning Commission originally set the FY2083/84 ceiling at Rs 1.89 trillion. Wagle requested a revision — it was raised to Rs 2.15 trillion and then slightly exceeded.",
+   q:"What was NPC's original budget ceiling for FY 2083/84 before Wagle's revision?",
+   opts:["Rs 1.2 trillion","Rs 1.89 trillion","Rs 2.5 trillion","Rs 3.0 trillion"],ans:1},
+];
+
+const FREE={w:"FREE",diff:"free",cat:""};
+
+/* ══════════════════════════════════
+   STATE
+══════════════════════════════════ */
+const S={
+  roomCode:"",isHost:false,name:"",
+  card:[],marked:Array(25).fill(false),score:0,
+  micOn:false,rec:null,trivIdx:null,trivTimer:null,
+  roomRef:null,
+};
+const TSECS={easy:20,medium:15,hard:10};
+const PTS={easy:1,medium:2,hard:3};
+
+/* ══════════════════════════════════
+   UTILS
+══════════════════════════════════ */
+const $=id=>document.getElementById(id);
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+function genCode(){const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join("");}
+function san(s){return s.replace(/[^a-zA-Z0-9_]/g,"_");}
+let toastT;
+function toast(msg,dur=2800){const el=$("toast");el.textContent=msg;el.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("show"),dur);}
+function goto(id){document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));$(id).classList.add("on");}
+function show(id){["lb-home","lb-host","lb-player"].forEach(s=>{$(s).style.display=s===id?"block":"none";});}
+function htab(id){
+  ["mic","manual","players","scores"].forEach((t,i)=>{
+    $("ht-"+t).style.display=t===id?"block":"none";
+    document.querySelectorAll(".tab")[i].classList.toggle("on",t===id);
+  });
+  if(id==="players")renderPlayers();
+  if(id==="scores")renderScores();
+}
+function makeCard(){
+  const by={easy:[],medium:[],hard:[]};
+  WORDS.forEach(w=>by[w.diff].push(w));
+  const picks=[...shuffle(by.easy).slice(0,8),...shuffle(by.medium).slice(0,9),...shuffle(by.hard).slice(0,7)];
+  const a=shuffle(picks).slice(0,24);
+  return [...a.slice(0,12),FREE,...a.slice(12)];
+}
+
+/* ══════════════════════════════════
+   CREATE ROOM
+══════════════════════════════════ */
+async function createRoom(){
+  const name=$("h-name").value.trim();
+  if(!name){toast("Enter your name first");return;}
+  const code=genCode();
+  const room={code,created:Date.now(),calledWords:{},players:{},bingoWinners:{},active:true};
+  room.players[san(name)]={name,isHost:true,score:0,t:Date.now()};
+  await db.ref("rooms/"+code).set(room);
+  S.roomCode=code;S.isHost=true;S.name=name;
+  S.roomRef=db.ref("rooms/"+code);
+  enterHost();
+}
+
+/* ══════════════════════════════════
+   JOIN ROOM
+══════════════════════════════════ */
+async function joinRoom(){
+  const name=$("p-name").value.trim();
+  const code=$("p-code").value.trim().toUpperCase();
+  if(!name){toast("Enter your name");return;}
+  if(code.length<4){toast("Enter the room code");return;}
+  const snap=await db.ref("rooms/"+code).once("value");
+  if(!snap.exists()){toast("Room not found — check the code");return;}
+  const room=snap.val();
+  const players=room.players||{};
+  if(Object.keys(players).length>=10){toast("Room is full (10 players max)");return;}
+  const key=san(name);
+  if(!players[key]){
+    await db.ref("rooms/"+code+"/players/"+key).set({name,isHost:false,score:0,t:Date.now()});
+  }
+  S.roomCode=code;S.isHost=false;S.name=name;
+  S.roomRef=db.ref("rooms/"+code);
+  S.card=makeCard();
+  S.marked=Array(25).fill(false);
+  S.marked[12]=true;
+  S.score=0;
+  enterPlayer();
+}
+
+/* ══════════════════════════════════
+   HOST SETUP
+══════════════════════════════════ */
+function enterHost(){
+  goto("s-host");
+  $("h-code-hdr").textContent=S.roomCode;
+  $("h-code-big").textContent=S.roomCode;
+  buildWordGrid([]);
+  S.roomRef.child("calledWords").on("value",snap=>{
+    const called=Object.values(snap.val()||{});
+    $("called-n").textContent=called.length;
+    renderChips(called);
+    buildWordGrid(called);
+  });
+  S.roomRef.child("players").on("value",snap=>{
+    $("h-pcount").textContent=Object.keys(snap.val()||{}).length;
+  });
+  S.roomRef.child("bingoWinners").on("value",snap=>{
+    const arr=Object.values(snap.val()||{});
+    if(arr.length){
+      const b=$("h-bingo-banner");
+      b.textContent="🎉 BINGO — "+arr[arr.length-1]+"! Everyone drinks!";
+      b.classList.add("on");
+    }
+  });
+}
+
+function buildWordGrid(called){
+  const el=$("h-wgrid");el.innerHTML="";
+  WORDS.forEach(w=>{
+    const d=document.createElement("div");
+    const isCalled=called.includes(w.w);
+    d.className="wb "+w.diff+(isCalled?" called":"");
+    d.innerHTML=w.w+'<span class="wd">'+w.diff+"</span>";
+    d.onclick=()=>callWord(w.w);
+    el.appendChild(d);
+  });
+}
+
+async function callWord(word){
+  const snap=await S.roomRef.child("calledWords").once("value");
+  const ex=new Set(Object.values(snap.val()||{}));
+  if(ex.has(word)){toast("Already called");return;}
+  await S.roomRef.child("calledWords/w"+Date.now()).set(word);
+  toast("Called: "+word);
+}
+
+function renderChips(called){
+  const el=$("called-chips");
+  if(!called.length){el.innerHTML='<span style="font-size:11px;color:var(--muted)">none yet</span>';return;}
+  el.innerHTML=called.map(w=>{
+    const d=WORDS.find(x=>x.w===w);
+    return'<span class="chip '+(d?d.diff:"easy")+'">'+w+"</span>";
+  }).join("");
+}
+
+function renderPlayers(){
+  S.roomRef.child("players").once("value",snap=>{
+    const ps=Object.values(snap.val()||{});
+    $("h-plist").innerHTML=ps.map(p=>`
+      <div class="prow">
+        <span style="font-weight:500">${p.name}</span>
+        <div style="display:flex;gap:5px">
+          ${p.isHost?'<span class="pbadge host">host</span>':""}
+          <span class="pbadge pts">${p.score||0}pt</span>
+        </div>
+      </div>`).join("");
+  });
+}
+
+function renderScores(){
+  S.roomRef.child("players").once("value",snap=>{
+    const ps=Object.values(snap.val()||{}).sort((a,b)=>(b.score||0)-(a.score||0));
+    const max=Math.max(...ps.map(p=>p.score||0),1);
+    $("h-scores").innerHTML=ps.map(p=>`
+      <div class="prow">
+        <span style="font-weight:500;min-width:80px">${p.name}${p.isHost?" 📢":""}</span>
+        <div class="sbar-wrap"><div class="sbar" style="width:${Math.max(3,(p.score||0)/max*100)}%"></div></div>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${p.score||0}pt</span>
+      </div>`).join("");
+  });
+}
+
+async function resetGame(){
+  if(!confirm("Reset all scores and called words?"))return;
+  await S.roomRef.update({calledWords:{},bingoWinners:{}});
+  const snap=await S.roomRef.child("players").once("value");
+  const updates={};
+  Object.keys(snap.val()||{}).forEach(k=>{updates["players/"+k+"/score"]=0;});
+  await S.roomRef.update(updates);
+  $("h-bingo-banner").classList.remove("on");
+  toast("Game reset!");
+}
+
+/* ══════════════════════════════════
+   MIC — phonetic alias matching
+   en-IN is closer to Nepali accent
+   than en-US
+══════════════════════════════════ */
+function toggleMic(){S.micOn?stopMic():startMic();}
+
+function startMic(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){toast("Live mic needs Chrome desktop");return;}
+  S.rec=new SR();
+  S.rec.continuous=true;
+  S.rec.interimResults=true;
+  S.rec.lang="en-IN";  // Indian English — closer to Nepali accent
+  const lastCalled=new Set();
+
+  S.rec.onresult=async e=>{
+    let full="";
+    for(let i=0;i<e.results.length;i++)full+=e.results[i][0].transcript+" ";
+    const lc=full.toLowerCase();
+    const lo=$("live-out");
+    lo.textContent=full.slice(-200)||"Listening...";
+
+    const snap=await S.roomRef.child("calledWords").once("value");
+    const ex=new Set(Object.values(snap.val()||{}));
+    const hits=[];
+
+    WORDS.forEach(w=>{
+      if(ex.has(w.w)||lastCalled.has(w.w))return;
+      if(w.aliases.some(a=>lc.includes(a.toLowerCase()))){
+        hits.push(w);lastCalled.add(w.w);
+      }
+    });
+
+    if(hits.length){
+      const updates={};
+      hits.forEach((w,i)=>{updates["calledWords/w"+(Date.now()+i)]=w.w;});
+      await S.roomRef.update(updates);
+      lo.innerHTML=full.slice(-140)+' <span class="live-hit">→ '+hits.map(h=>h.w).join(", ")+"</span>";
+    }
+  };
+  S.rec.onerror=e=>{toast("Mic error: "+e.error);stopMic();};
+  S.rec.onend=()=>{if(S.micOn)S.rec.start();};
+  S.rec.start();
+  S.micOn=true;
+  $("mic-btn").textContent="⏹ Stop";
+  $("mic-btn").className="btn sm danger";
+  $("live-out").textContent="Listening… aim mic at the TV or speaker.";
+}
+
+function stopMic(){
+  if(S.rec)S.rec.stop();
+  S.micOn=false;
+  $("mic-btn").textContent="▶ Start";
+  $("mic-btn").className="btn sm success";
+}
+
+/* ══════════════════════════════════
+   PLAYER SETUP
+══════════════════════════════════ */
+function enterPlayer(){
+  goto("s-player");
+  $("p-name-hdr").textContent=S.name+"'s card";
+  $("p-room-hdr").textContent="Room: "+S.roomCode;
+  renderCard([]);
+
+  S.roomRef.child("calledWords").on("value",snap=>{
+    const called=Object.values(snap.val()||{});
+    renderCard(called);
+    const newCalls=called.filter(w=>{
+      const idx=S.card.findIndex(c=>c.w===w);
+      return idx!==-1&&!S.marked[idx];
+    });
+    if(newCalls.length){
+      const ps=$("p-status");
+      ps.innerHTML='<span class="dot"></span>'+newCalls[newCalls.length-1]+" — tap it!";
+      ps.style.background="var(--red)";
+    }
+  });
+
+  S.roomRef.child("bingoWinners").on("value",snap=>{
+    const ws=Object.values(snap.val()||{});
+    if(ws.includes(S.name)){
+      const b=$("p-bingo-banner");
+      b.textContent="🎉 BINGO! "+S.name+" wins — everyone drinks!";
+      b.classList.add("on");
+    }
+  });
+}
+
+/* ══════════════════════════════════
+   BINGO CARD RENDER
+══════════════════════════════════ */
+function renderCard(called){
+  const el=$("p-bgrid");
+  const bingoSet=new Set(calcBingo());
+  el.innerHTML="";
+  S.card.forEach((cell,i)=>{
+    const div=document.createElement("div");
+    const isFree=cell===FREE;
+    const isCalled=!isFree&&called.includes(cell.w);
+    const isMarked=S.marked[i];
+    const isBingo=bingoSet.has(i);
+    div.className="bc"
+      +(isFree?" free-cell":"")
+      +(!isFree?" "+cell.diff:"")
+      +(isCalled&&!isMarked?" called-now":"")
+      +(isMarked?" marked-ok":"")
+      +(isBingo?" bingo-lit":"");
+    if(isFree){
+      div.innerHTML='<div class="bw">FREE</div><div class="bcat">🍺 free sip</div>';
+    } else {
+      div.innerHTML=`<div class="bw">${cell.w}</div><div class="bcat">${cell.cat}</div><div class="bdiff">${cell.diff}</div>`;
+      if(isCalled&&!isMarked)div.onclick=()=>openTrivia(i);
+    }
+    el.appendChild(div);
+  });
+}
+
+function calcBingo(){
+  const m=S.marked;const r=[];
+  for(let i=0;i<5;i++){
+    const row=[i*5,i*5+1,i*5+2,i*5+3,i*5+4];
+    if(row.every(x=>m[x]))r.push(...row);
+    const col=[i,i+5,i+10,i+15,i+20];
+    if(col.every(x=>m[x]))r.push(...col);
+  }
+  if([0,6,12,18,24].every(x=>m[x]))r.push(0,6,12,18,24);
+  if([4,8,12,16,20].every(x=>m[x]))r.push(4,8,12,16,20);
+  return [...new Set(r)];
+}
+
+/* ══════════════════════════════════
+   TRIVIA
+══════════════════════════════════ */
+let tInt=null;
+
+function openTrivia(idx){
+  const cell=S.card[idx];
+  if(!cell||cell===FREE||!cell.q)return;
+  S.trivIdx=idx;
+  $("t-word").textContent=cell.w;
+  $("t-ctx").textContent=cell.ctx||"";
+  $("t-q").textContent=cell.q;
+  const pill=$("t-pill");
+  pill.textContent=cell.diff.toUpperCase()+" · +"+PTS[cell.diff]+" pt";
+  pill.className="diff-pill "+cell.diff;
+  const opts=$("t-opts");opts.innerHTML="";
+  cell.opts.forEach((opt,i)=>{
+    const btn=document.createElement("button");
+    btn.className="topt";btn.textContent=opt;
+    btn.onclick=()=>answer(i,cell.ans,idx,cell.diff);
+    opts.appendChild(btn);
+  });
+  const lim=TSECS[cell.diff];
+  let left=lim;
+  $("t-bar").className="tbar "+cell.diff;
+  $("t-bar").style.width="100%";
+  $("t-secs").textContent=lim+"s";
+  $("t-overlay").style.display="flex";
+  clearInterval(tInt);
+  tInt=setInterval(()=>{
+    left-=0.1;
+    $("t-bar").style.width=Math.max(0,left/lim*100)+"%";
+    $("t-secs").textContent=Math.ceil(left)+"s";
+    if(left<=0){clearInterval(tInt);closeTrivia();shakeCell(idx);toast("Time's up! No square. ⏱");}
+  },100);
+}
+
+async function answer(chosen,correct,idx,diff){
+  clearInterval(tInt);
+  document.querySelectorAll(".topt").forEach(b=>b.onclick=null);
+  const opts=document.querySelectorAll(".topt");
+  opts[correct].classList.add("ok");
+  if(chosen!==correct){
+    opts[chosen].classList.add("no");
+    setTimeout(()=>{closeTrivia();shakeCell(idx);toast("Wrong! No square for you 😬");},900);
+    return;
+  }
+  setTimeout(async()=>{
+    closeTrivia();
+    S.marked[idx]=true;
+    const pts=PTS[diff];
+    S.score+=pts;
+    $("p-score").textContent=S.score;
+    toast("Correct! +"+pts+"pt 🎉");
+    const key=san(S.name);
+    await S.roomRef.child("players/"+key+"/score").set(S.score);
+    const blines=calcBingo();
+    if(blines.length){
+      const snap=await S.roomRef.child("bingoWinners").once("value");
+      const ex=Object.values(snap.val()||{});
+      if(!ex.includes(S.name)){
+        await S.roomRef.child("bingoWinners/"+key).set(S.name);
+        toast("🎉 BINGO! Everyone drinks! 🍺🍺🍺",4000);
+      }
+    }
+    const cw=await S.roomRef.child("calledWords").once("value");
+    renderCard(Object.values(cw.val()||{}));
+  },700);
+}
+
+function closeTrivia(){clearInterval(tInt);$("t-overlay").style.display="none";}
+function shakeCell(idx){
+  const cells=document.querySelectorAll(".bc");
+  if(cells[idx]){cells[idx].classList.add("shake");setTimeout(()=>cells[idx].classList.remove("shake"),400);}
+}
+$("t-overlay").addEventListener("click",function(e){if(e.target===this)closeTrivia();});
+</script>
+</body>
+</html>
